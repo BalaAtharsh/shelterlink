@@ -32,6 +32,14 @@
   th{background:#f8fafc;color:#475569;font-weight:600}
   input,select.f,textarea{width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;margin-top:4px}
   input[type=checkbox]{width:auto;margin:0;padding:0;flex:none;transform:scale(1.15)}
+  #toasts{position:fixed;top:64px;right:18px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+  .toast{min-width:230px;max-width:380px;background:#0f766e;color:#fff;padding:11px 14px;border-radius:9px;
+    box-shadow:0 8px 24px rgba(0,0,0,.18);font-size:13.5px;line-height:1.45;animation:tin .22s ease-out;display:flex;gap:9px;align-items:flex-start}
+  .toast.err{background:#b4442b} .toast.warn{background:#9a6700}
+  .toast .tk{font-size:15px;line-height:1.2}
+  .toast.out{animation:tout .3s ease-in forwards}
+  @keyframes tin{from{opacity:0;transform:translateX(26px)}to{opacity:1;transform:none}}
+  @keyframes tout{to{opacity:0;transform:translateX(26px)}}
   label.chk{display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer}
   table input[type=date],table select.f{margin-top:0;padding:5px;font-size:12px}
   label{font-size:12px;color:#475569;font-weight:600;display:block;margin-top:10px}
@@ -139,11 +147,21 @@ const S={
  currentUserId:1, view:'home', selAnimal:null, fSpecies:'', fSex:'', authed:false, loginErr:''
 };
 const PASSWORD='BISM7255';
+// On-screen confirmation messages
+function toast(msg,type){
+  let box=document.getElementById('toasts');
+  if(!box){box=document.createElement('div');box.id='toasts';document.body.appendChild(box)}
+  const t=document.createElement('div');
+  t.className='toast'+(type?' '+type:'');
+  t.innerHTML=`<span class="tk">${type==='err'?'⚠️':type==='warn'?'⚠️':'✅'}</span><span>${msg}</span>`;
+  box.appendChild(t);
+  setTimeout(()=>{t.classList.add('out');setTimeout(()=>t.remove(),300)},3200);
+}
 let nextAnimal=7, nextApp=2, nextMed=6, nextT=7;
 // audit + lookup lists + filters
 S.users.forEach(u=>{u.signup=u.signup||'2026-08-20 09:15';u.lastLogin=u.lastLogin||'';u.roleBy=u.roleBy||null;u.roleAt=u.roleAt||'';u.statusBy=u.statusBy||null;u.statusAt=u.statusAt||'';u.household=u.household||'';u.housing=u.housing||'';u.refs=u.refs||'';});
 // Animal audit + optional fields (A.1.1.3.1): date entered, last modified, date of death
-S.animals.forEach((a,i)=>{a.dod=a.dod||'';a.created=a.created||['2026-08-14 09:05','2026-08-15 11:20','2026-07-02 08:40','2026-08-01 14:10','2026-09-12 16:25','2026-08-22 10:00'][i]||'2026-08-20 09:00';a.modified=a.modified||a.created;});
+S.animals.forEach((a,i)=>{a.dod=a.dod||'';a.created=a.created||['2026-08-14 09:05','2026-08-15 11:20','2026-07-02 08:40','2026-08-01 14:10','2026-09-12 16:25','2026-08-22 10:00'][i]||'2026-08-20 09:00';a.modified=a.modified||a.created;a.statusAt=a.statusAt||a.created;a.statusBy=a.statusBy||2;});
 S.behaviour.forEach(b=>{b.followUp=b.followUp||false;b.reassess=b.reassess||'';});
 S.applications.forEach(p=>{p.meet=p.meet||'';p.agreement=p.agreement||false;p.payment=p.payment||'Unpaid';p.followUpDate=p.followUpDate||'';});
 // Photos — one record per photo, per A.1.1.3.1 (date taken, by whom, use on adoption listing)
@@ -188,6 +206,7 @@ function nav(){
   return `<nav>${items.map(([v,l])=>`<button class="${S.view===v?'active':''}" onclick="go('${v}')">${l}</button>`).join('')}</nav>`;
 }
 function go(v){S.view=v;S.selAnimal=null;render()}
+function resetFilters(){S.fSpecies='';S.fBreed='';S.fSex='';S.fTemp='';toast('Filters cleared — showing all listed animals.');render()}
 function openAnimal(id){S.selAnimal=id;S.view='animalDetail';render()}
 
 function home(){
@@ -219,7 +238,9 @@ function listing(){
      <select onchange="S.fBreed=this.value;render()"><option value="">All breeds</option>${breedOpts.map(s=>`<option ${S.fBreed===s?'selected':''}>${s}</option>`).join('')}</select>
      <select onchange="S.fSex=this.value;render()"><option value="">Any sex</option>${sexes.map(s=>`<option ${S.fSex===s?'selected':''}>${s}</option>`).join('')}</select>
      <select onchange="S.fTemp=this.value;render()"><option value="">Any temperament</option>${S.temperaments.map(s=>`<option ${S.fTemp===s?'selected':''}>${s}</option>`).join('')}</select>
+     <button class="btn sec" onclick="resetFilters()">↺ Reset filters</button>
    </div>
+   ${(S.fSpecies||S.fBreed||S.fSex||S.fTemp)?`<div class="muted" style="margin:-4px 0 10px">Showing ${a.length} of ${S.animals.filter(x=>x.status==='Current').length} listed animals — filters applied.</div>`:''}
    <div class="grid">${a.map(x=>{const pic=S.photos.find(p=>p.animal===x.id&&p.useOnListing);return `<div class="card">${pic?`<img src="${pic.img}" style="width:100%;height:150px;object-fit:cover;border-radius:8px;display:block;margin-bottom:8px">`:'<div class="photo"></div>'}<div class="row" style="justify-content:space-between"><b>${x.name}</b><span class="pill st-${x.status.replace(' ','-')}">${x.status}</span></div>
      <div class="muted">${x.breed} · ${x.sex} · ${age(x.dob)} yrs</div>
      <div style="margin:6px 0">${x.temperaments.map(t=>`<span class="pill tp">${t}</span>`).join('')}</div>
@@ -241,6 +262,7 @@ function animalDetail(){
    <div class="muted" style="margin-top:6px"><b>${x.breed}</b> — ${S.breedDesc[x.breed]||'No breed description recorded.'}</div>
    <div class="muted" style="margin-top:6px">Date of birth ${x.dob} (age ${age(x.dob)})${x.dod?` · <b>Date of death ${x.dod}</b>`:''}</div>
    <div class="muted" style="margin-top:4px">Date entered ${x.created} · Last modified ${x.modified}</div>
+   <div class="muted" style="margin-top:4px">Listing status <b>${x.status}</b>${x.statusAt?` · status updated ${x.statusAt}${x.statusBy?' by '+uName(x.statusBy):''}`:' · not changed since intake'}</div>
    <div class="muted" style="margin-top:4px">Adoption fee $${x.fee}${x.adoptedBy?` · Adopted by ${uName(x.adoptedBy)}`:''}</div></div>`;
   // Photos sub-screen
   const pics=S.photos.filter(p=>p.animal===x.id);
@@ -334,13 +356,13 @@ function applyView(){
 }
 function addUser(){
   const name=$('nu_name').value.trim(), email=$('nu_email').value.trim().toLowerCase();
-  if(!name||!email){alert('Enter a name and email.');return}
-  if(S.users.some(u=>u.email.toLowerCase()===email)){alert('A user with that email already exists.');return}
+  if(!name||!email){toast('Enter a name and email.','err');return}
+  if(S.users.some(u=>u.email.toLowerCase()===email)){toast('A user with that email already exists.','err');return}
   let r=$('nu_role').value;
-  if(r==='Administrator'&&S.users.some(u=>u.role==='Administrator')){alert('Only one Administrator allowed at a time. Change the current Administrator first.');return}
+  if(r==='Administrator'&&S.users.some(u=>u.role==='Administrator')){toast('Only one Administrator allowed at a time. Change the current Administrator first.','err');return}
   const id=Math.max(0,...S.users.map(u=>u.id))+1;
   S.users.push({id,name,title:$('nu_title').value,email,role:r,status:$('nu_status').value});
-  alert('User created: '+name+' ('+r+'). They can log in with password BISM7255.');render();
+  toast('User created: '+name+' ('+r+'). They can log in with password BISM7255.');render();
 }
 function usersView(){
   return `<h1>User Administration</h1><div class="sub">The Administrator can create users, and change roles and status. New sign-ups default to Adopter/Active; only one Administrator at a time.</div>
@@ -386,7 +408,7 @@ function adopterProfileView(){
      <div style="margin-top:10px"><button class="btn" onclick="saveProfile()">Save profile</button></div>
    </div>`;
 }
-function saveProfile(){const u=me();u.household=$('pp_house').value;u.housing=$('pp_housing').value;u.refs=$('pp_refs').value;alert('Profile saved.');render()}
+function saveProfile(){const u=me();u.household=$('pp_house').value;u.housing=$('pp_housing').value;u.refs=$('pp_refs').value;toast('Profile saved.');render()}
 function systemView(){
   return `<h1>System Administration</h1><div class="sub">Maintain dropdown lists. "Retiring" (soft delete) keeps an item on old records but hides it from new ones.</div>
    <div class="sectionTitle">Medications</div>
@@ -408,37 +430,46 @@ function systemView(){
      <td><button class="btn sec" onclick="editBreed('${b.replace(/'/g,"\\'")}')">Edit description</button></td></tr>`).join('')}</table>
    <div class="muted" style="margin-top:10px">The same add / retire (soft-delete) maintenance applies to every dropdown list — Roles, Species, Breeds and Temperaments — so retired options disappear from new records but stay on historical ones.</div>`;
 }
-function editBreed(b){const v=prompt('Breed description for '+b+':',S.breedDesc[b]||'');if(v===null)return;S.breedDesc[b]=v.trim();render()}
-function toggleTitle(id){const t=S.titles.find(x=>x.id===id);t.active=!t.active;render()}
-function addTitle(){const n=$('newtitle').value.trim();if(!n)return;S.titles.push({id:nextT++,name:n,active:true});render()}
+function editBreed(b){const v=prompt('Breed description for '+b+':',S.breedDesc[b]||'');if(v===null)return;S.breedDesc[b]=v.trim();toast('Breed description updated for '+b+'.');render()}
+function toggleTitle(id){const t=S.titles.find(x=>x.id===id);t.active=!t.active;
+  toast(t.active?('"'+t.name+'" reactivated.'):('"'+t.name+'" retired — hidden from new records, kept on existing ones.'),t.active?'':'warn');render()}
+function addTitle(){const n=$('newtitle').value.trim();if(!n){toast('Enter a title first.','err');return}S.titles.push({id:nextT++,name:n,active:true});$('newtitle').value='';toast('Title "'+n+'" added.');render()}
 // actions
-function applyTo(id){if(!can('apply')){alert('Only adopters can apply.');return}S.view='apply';render();setTimeout(()=>{const s=$('aanimal');if(s)s.value=id},0)}
+function applyTo(id){if(!can('apply')){toast('Only adopters can apply.','err');return}S.view='apply';render();setTimeout(()=>{const s=$('aanimal');if(s)s.value=id},0)}
 function fillBreeds(){const sp=$('ispecies').value;$('ibreed').innerHTML=(S.breeds[sp]||['Unknown']).map(b=>`<option>${b}</option>`).join('')}
-function doIntake(){const n=$('iname').value.trim();if(!n){alert('Enter a name');return}
+function doIntake(){const n=$('iname').value.trim();if(!n){toast('Enter a name','err');return}
   S.animals.push({id:nextAnimal++,name:n,species:$('ispecies').value,breed:$('ibreed').value,dob:$('idob').value||'2024-01-01',sex:$('isex').value,fee:0,temperaments:[],desc:$('inotes').value||'Newly intaken.',chip:$('ichip').value.trim(),status:'Not Fit',adoptedBy:null,intakeBy:S.currentUserId,dod:'',created:new Date().toISOString().slice(0,19).replace('T',' '),modified:new Date().toISOString().slice(0,19).replace('T',' ')});
-  alert('Intake saved. '+n+' added with status "Not Fit". Returning to home.');S.view='home';render()}
-function addMedical(id){const d=$('mdesc').value.trim();if(!d){alert('Enter a description');return}
-  S.medical.push({animal:id,date:new Date().toISOString().slice(0,10),by:S.currentUserId,desc:d,med:$('mmed').value});render()}
-function addBehaviour(id){const d=$('bdesc').value.trim();if(!d){alert('Enter a description');return}
-  S.behaviour.push({animal:id,date:new Date().toISOString().slice(0,10),by:S.currentUserId,desc:d,rec:$('brec').value,followUp:$('bfollow').checked,reassess:$('breassess').value});touch(id);render()}
+  toast('Intake saved. '+n+' added with status "Not Fit". Returning to home.');S.view='home';render()}
+function addMedical(id){const d=$('mdesc').value.trim();if(!d){toast('Enter a description','err');return}
+  S.medical.push({animal:id,date:new Date().toISOString().slice(0,10),by:S.currentUserId,desc:d,med:$('mmed').value});touch(id);toast('Medical record saved and added to the animal\'s history.');render()}
+function addBehaviour(id){const d=$('bdesc').value.trim();if(!d){toast('Enter a description','err');return}
+  S.behaviour.push({animal:id,date:new Date().toISOString().slice(0,10),by:S.currentUserId,desc:d,rec:$('brec').value,followUp:$('bfollow').checked,reassess:$('breassess').value});touch(id);toast('Behaviour assessment saved.');render()}
 // Photos (A.1.1.3.1) — date taken, by whom, use on adoption listing
 function addPhoto(id){const f=$('pfile').files[0];
-  if(!f){alert('Choose an image file first.');return}
+  if(!f){toast('Choose an image file first.','err');return}
   const use=$('puse').checked, dt=$('pdate').value||new Date().toISOString().slice(0,10);
   const r=new FileReader();
-  r.onload=e=>{S.photos.push({id:nextPhoto++,animal:id,img:e.target.result,date:dt,by:S.currentUserId,useOnListing:use});touch(id);render()};
+  r.onload=e=>{S.photos.push({id:nextPhoto++,animal:id,img:e.target.result,date:dt,by:S.currentUserId,useOnListing:use});touch(id);
+    toast('Photo uploaded'+(use?' and set as the adoption listing photo.':'.'));render()};
   r.readAsDataURL(f);}
-function togglePhoto(pid){const p=S.photos.find(x=>x.id===pid);p.useOnListing=!p.useOnListing;touch(p.animal);render()}
-function delPhoto(pid){const p=S.photos.find(x=>x.id===pid);if(!confirm('Delete this photo?'))return;S.photos=S.photos.filter(x=>x.id!==pid);touch(p.animal);render()}
+function togglePhoto(pid){const p=S.photos.find(x=>x.id===pid);p.useOnListing=!p.useOnListing;touch(p.animal);
+  toast(p.useOnListing?'This photo will now be used on the adoption listing.':'Photo removed from the adoption listing.');render()}
+function delPhoto(pid){const p=S.photos.find(x=>x.id===pid);if(!confirm('Delete this photo?'))return;S.photos=S.photos.filter(x=>x.id!==pid);touch(p.animal);toast('Photo deleted.','warn');render()}
 // Edit animal details — stamps Last modified
 function touch(id){const a=S.animals.find(x=>x.id===id);if(a)a.modified=new Date().toISOString().slice(0,19).replace('T',' ');}
 function saveAnimal(id){const a=S.animals.find(x=>x.id===id);
   a.fee=+$('ed_fee').value||0; a.chip=$('ed_chip').value.trim(); a.dob=$('ed_dob').value||a.dob; a.dod=$('ed_dod').value;
   a.desc=$('ed_desc').value.trim()||a.desc;
   a.temperaments=[...$('ed_temps').selectedOptions].map(o=>o.value);
-  touch(id); alert('Animal details saved.'); render();}
-function setStatus(id,st){S.animals.find(a=>a.id===id).status=st;touch(id);if(st==='Adopted'){const a=S.animals.find(a=>a.id===id);const app=S.applications.find(p=>p.animal===id);a.adoptedBy=app?app.adopter:6}render()}
-function submitApp(){const aid=+$('aanimal').value;S.applications.push({id:nextApp++,adopter:S.currentUserId,animal:aid,date:new Date().toISOString().slice(0,10),status:'Submitted',reference:'Pending',home:'Pending',pet:'Pending',meet:'',agreement:false,payment:'Unpaid',followUpDate:''});alert('Application submitted. Staff will review your suitability. Returning to home.');S.view='home';render()}
+  touch(id); toast('Animal details saved.'); render();}
+function setStatus(id,st){const a=S.animals.find(a=>a.id===id);a.status=st;a.statusAt=new Date().toISOString().slice(0,19).replace('T',' ');a.statusBy=S.currentUserId;touch(id);
+  if(st==='Adopted'){const app=S.applications.find(p=>p.animal===id);a.adoptedBy=app?app.adopter:6}
+  const note={'Pre-Listing':a.name+' is now Pre-Listing — medically cleared by the vet, awaiting staff review.',
+    'Current':a.name+' is now Current and live on the public adoption listing.',
+    'Adopted':a.name+' is now Adopted and has been removed from the public listing.',
+    'Removed':a.name+' has been Removed from the listing.','Not Fit':a.name+' is marked Not Fit and is hidden from the public listing.'}[st];
+  toast(note||('Status updated to '+st), st==='Removed'?'warn':'');render()}
+function submitApp(){const aid=+$('aanimal').value;S.applications.push({id:nextApp++,adopter:S.currentUserId,animal:aid,date:new Date().toISOString().slice(0,10),status:'Submitted',reference:'Pending',home:'Pending',pet:'Pending',meet:'',agreement:false,payment:'Unpaid',followUpDate:''});toast('Application submitted. Staff will review your suitability. Returning to home.');S.view='home';render()}
 function applicationsView(){
   return `<h1>Adoption Applications</h1><div class="sub">Staff review each applicant's suitability (reference, home, pet compatibility), then approve to pass ownership to the adopter. Approving marks the animal Adopted and removes it from the public listing.</div>
    <table><tr><th>Adopter</th><th>Animal</th><th>Date</th><th>Reference</th><th>Home</th><th>Pet compat.</th><th>Meet &amp; greet</th><th>Agreement</th><th>Payment</th><th>Follow-up visit</th><th>Status</th><th>Action</th></tr>
@@ -455,23 +486,26 @@ function applicationsView(){
       <td>${a.status==='Approved'?'<span class="muted">✔ finalised</span>':a.status==='Rejected'?'<span class="muted">rejected</span>':`<button class="btn" onclick="approveApp(${a.id})">Approve &amp; adopt</button> <button class="btn warn" onclick="rejectApp(${a.id})">Reject</button>`}</td></tr>`;
    }).join('')||'<tr><td colspan=12 class="muted">No applications yet.</td></tr>'}</table>`;
 }
-function setCheck(id,k,v){S.applications.find(a=>a.id===id)[k]=v;render()}
+function setCheck(id,k,v){S.applications.find(a=>a.id===id)[k]=v;
+  const L={reference:'Reference check',home:'Home suitability',pet:'Pet compatibility',meet:'Meet-and-greet date',agreement:'Adoption agreement',payment:'Payment status',followUpDate:'Follow-up visit'};
+  toast(L[k]+' updated'+(typeof v==='string'&&v?' to '+v:v===true?' — signed':v===false?' — not signed':'')+'.');render()}
 function approveApp(id){const a=S.applications.find(x=>x.id===id);
   if([a.reference,a.home,a.pet].some(c=>c!=='Pass')){if(!confirm('Not all suitability checks are marked Pass. Approve anyway?'))return}
   a.status='Approved';const an=S.animals.find(x=>x.id===a.animal);if(an){an.status='Adopted';an.adoptedBy=a.adopter}
-  alert('Approved. Ownership of '+(an?an.name:'the animal')+' passed to '+uName(a.adopter)+'. It is now Adopted and removed from the listing.');render()}
-function rejectApp(id){S.applications.find(x=>x.id===id).status='Rejected';render()}
+  toast('Approved. Ownership of '+(an?an.name:'the animal')+' passed to '+uName(a.adopter)+'. It is now Adopted and removed from the listing.');render()}
+function rejectApp(id){const a=S.applications.find(x=>x.id===id);a.status='Rejected';toast('Application from '+uName(a.adopter)+' rejected.','warn');render()}
 function chRole(id,r){const u=S.users.find(x=>x.id===id);
-  if(r==='Administrator'){ if(u.status!=='Active'){alert('The new Administrator must have an Active status first.');return render()}
+  if(r==='Administrator'){ if(u.status!=='Active'){toast('The new Administrator must have an Active status first.','err');return render()}
     const cur=S.users.find(x=>x.role==='Administrator');
     if(cur&&cur.id!==id){ if(!confirm('Only one Administrator allowed. Transfer the Administrator role from '+cur.name+'? They will become Staff.')){return render()}
       cur.role='Staff';cur.roleBy=S.currentUserId;cur.roleAt=now(); } }
-  u.role=r;u.roleBy=S.currentUserId;u.roleAt=now();render()}
+  u.role=r;u.roleBy=S.currentUserId;u.roleAt=now();toast(u.name+' is now '+r+'. The change has been recorded against your name.');render()}
 function chStatus(id,s){const u=S.users.find(x=>x.id===id);
-  if(u.role==='Administrator'&&s==='Inactive'){alert('The Administrator cannot be set to Inactive.');return render()}
-  u.status=s;u.statusBy=S.currentUserId;u.statusAt=now();render()}
-function toggleMed(id){const m=S.medications.find(x=>x.id===id);m.active=!m.active;render()}
-function addMed(){const n=$('newmed').value.trim();if(!n)return;S.medications.push({id:nextMed++,name:n,desc:'Added by admin',active:true});render()}
+  if(u.role==='Administrator'&&s==='Inactive'){toast('The Administrator cannot be set to Inactive.','err');return render()}
+  u.status=s;u.statusBy=S.currentUserId;u.statusAt=now();toast(u.name+' set to '+s+'. The change has been recorded against your name.',s==='Inactive'?'warn':'');render()}
+function toggleMed(id){const m=S.medications.find(x=>x.id===id);m.active=!m.active;
+  toast(m.active?(m.name+' reactivated and available again.'):(m.name+' retired — removed from new records, but kept on the animals already treated with it.'),m.active?'':'warn');render()}
+function addMed(){const n=$('newmed').value.trim();if(!n){toast('Enter a medication name first.','err');return}S.medications.push({id:nextMed++,name:n,desc:'Added by admin',active:true});$('newmed').value='';toast('Medication "'+n+'" added and available in new records.');render()}
 
 // ---- Excel database (SheetJS) ----
 let fileHandle=null, saveT=null;
@@ -498,13 +532,13 @@ function loadWB(wb){
   S.behaviour.forEach(b=>{b.followUp=b.followUp===true||b.followUp==='TRUE'||b.followUp==='Yes';b.reassess=b.reassess||''});
   S.applications.forEach(p=>{p.meet=p.meet||'';p.payment=p.payment||'Unpaid';p.followUpDate=p.followUpDate||''});
 }
-function exportExcel(){ if(!window.XLSX){alert('Open this file in Chrome or Edge to use the Excel features.');return} XLSX.writeFile(buildWB(),'ShelterLink_Data.xlsx'); }
-function importExcelFile(file){ if(!window.XLSX){alert('Open in Chrome/Edge.');return} if(!file)return;
-  const r=new FileReader(); r.onload=e=>{ try{loadWB(XLSX.read(e.target.result,{type:'array'})); alert('Data loaded from Excel.'); render();}catch(err){alert('Could not read that file.')} }; r.readAsArrayBuffer(file); }
-async function syncFile(){ if(!window.XLSX){alert('Open in Chrome/Edge.');return}
-  if(!window.showSaveFilePicker){alert('Live sync needs Chrome or Edge. Use Export / Import instead.');return}
+function exportExcel(){ if(!window.XLSX){toast('Open this file in Chrome or Edge to use the Excel features.');return} XLSX.writeFile(buildWB(),'ShelterLink_Data.xlsx'); }
+function importExcelFile(file){ if(!window.XLSX){toast('Open in Chrome/Edge.');return} if(!file)return;
+  const r=new FileReader(); r.onload=e=>{ try{loadWB(XLSX.read(e.target.result,{type:'array'})); toast('Data loaded from Excel.'); render();}catch(err){toast('Could not read that file.')} }; r.readAsArrayBuffer(file); }
+async function syncFile(){ if(!window.XLSX){toast('Open in Chrome/Edge.');return}
+  if(!window.showSaveFilePicker){toast('Live sync needs Chrome or Edge. Use Export / Import instead.');return}
   try{ fileHandle=await window.showSaveFilePicker({suggestedName:'ShelterLink_Data.xlsx',types:[{description:'Excel',accept:{'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':['.xlsx']}}]});
-    await saveToFile(); S.synced=true; render(); alert('Connected. Your edits now auto-save to that Excel file.'); }catch(e){} }
+    await saveToFile(); S.synced=true; render(); toast('Connected. Your edits now auto-save to that Excel file.'); }catch(e){} }
 async function saveToFile(){ if(!fileHandle||!window.XLSX)return;
   try{ const data=XLSX.write(buildWB(),{type:'array',bookType:'xlsx'}); const w=await fileHandle.createWritable(); await w.write(new Blob([data])); await w.close(); }catch(e){} }
 function autosave(){ if(fileHandle){clearTimeout(saveT); saveT=setTimeout(saveToFile,700);} }
